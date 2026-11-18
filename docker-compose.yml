@@ -1,7 +1,6 @@
 services:
-  funpaycardinal:
+  funpaynext:
     build: .
-    container_name: funpaycardinal
     restart: unless-stopped
     stdin_open: true
     tty: true

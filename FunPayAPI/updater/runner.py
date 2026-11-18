@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 from ..common import exceptions
 from ..common.utils import strip_invisible_suffix
 from .events import *
+from .sent_messages import SentMessages
 
 logger = logging.getLogger("FunPayAPI.runner")
 
@@ -48,7 +49,7 @@ class Runner:
     """
 
     def __init__(self, account: Account, disable_message_requests: bool = False,
-                 disabled_order_requests: bool = False):
+                 disabled_order_requests: bool = False, *, sent_messages_path: str | None = None):
         # todo добавить события и исключение событий о новых покупках (не продажах!)
         if not account.is_initiated:
             raise exceptions.AccountNotInitiatedError()
@@ -73,8 +74,7 @@ class Runner:
         """ID последний сообщений {ID чата: [ID последего сообщения чата, ID последнего прочитанного сообщения чата, 
         текст последнего сообщения или None, если это изображение]}."""
 
-        self.by_bot_ids: dict[int, list[int]] = {}
-        """ID сообщений, отправленных с помощью self.account.send_message ({ID чата: [ID сообщения, ...]})."""
+        self._sent_messages = SentMessages(account.id, sent_messages_path)
 
         self.last_messages_ids: dict[int, int] = {}
         """ID последних сообщений в чатах ({ID чата: ID последнего сообщения})."""
@@ -359,7 +359,7 @@ class Runner:
 
             node_msg_id = int(chat.get('data-node-msg'))
             user_msg_id = int(chat.get('data-user-msg'))
-            by_bot = False
+            by_bot = self.is_by_bot(chat_id, node_msg_id)
             by_vertex = False
             if last_msg_text.startswith(self.account.bot_character):
                 last_msg_text = last_msg_text[1:]
@@ -384,8 +384,9 @@ class Runner:
             chat_with = chat.find("div", {"class": "media-user-name"}).text
             chat_obj = types.ChatShortcut(chat_id, chat_with, last_msg_text, node_msg_id,
                                           user_msg_id, unread, str(chat))
-            if last_msg_text_or_none is not None:
+            if last_msg_text_or_none is not None or by_bot:
                 chat_obj.last_by_bot = by_bot
+            if last_msg_text_or_none is not None:
                 chat_obj.last_by_vertex = by_vertex
 
             self.account.add_chats([chat_obj])
@@ -485,8 +486,6 @@ class Runner:
         for cid in chats:
             messages = chats[cid]
             result[cid] = []
-            self.by_bot_ids[cid] = self.by_bot_ids.get(cid) or []
-
             # Удаляем все сообщения, у которых ID меньше сохраненного последнего сообщения
             if self.last_messages_ids.get(cid):
                 messages = [i for i in messages if i.id > self.last_messages_ids[cid]]
@@ -494,10 +493,9 @@ class Runner:
                 continue
 
             # Отмечаем все сообщения, отправленные с помощью Account.send_message()
-            if self.by_bot_ids.get(cid):
-                for i in messages:
-                    if not i.by_bot and i.id in self.by_bot_ids[cid]:
-                        i.by_bot = True
+            for message in messages:
+                if message.author_id == self.account.id and self.is_by_bot(cid, message.id):
+                    message.by_bot = True
 
             stack = MessageEventsStack()
 
@@ -509,7 +507,6 @@ class Runner:
             self.last_messages_ids[cid] = messages[-1].id  # Перезаписываем ID последнего сообщение
             self.chat_node_tags[cid] = messages[-1].tag # Перезаписываем тег чата
             self.users_ids[cid] = messages[-1].interlocutor_id
-            self.by_bot_ids[cid] = [i for i in self.by_bot_ids[cid] if i > self.last_messages_ids[cid]]  # чистим память
 
             for msg in messages:
                 event = NewMessageEvent(self.__last_msg_event_tag, msg, stack)
@@ -600,10 +597,10 @@ class Runner:
         :param message_id: ID сообщения.
         :type message_id: :obj:`int`
         """
-        if self.by_bot_ids.get(chat_id) is None:
-            self.by_bot_ids[chat_id] = [message_id]
-        else:
-            self.by_bot_ids[chat_id].append(message_id)
+        self._sent_messages.remember(chat_id, message_id)
+
+    def is_by_bot(self, chat_id: int, message_id: int) -> bool:
+        return self._sent_messages.contains(chat_id, message_id)
 
     def listen(self, requests_delay: int | float = 6.0,
                ignore_exceptions: bool = True) -> Generator[InitialChatEvent | ChatsListChangedEvent |

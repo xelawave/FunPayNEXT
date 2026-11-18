@@ -1,8 +1,7 @@
-<h1 align="center">FunPay Cardinal</h1>
+<h1 align="center">FunPayNEXT</h1>
 <h4 align="center">Простой и эффективный бот для автоматизации FunPay</h4>
 
-<h2 align="center">Перед началом настоятельно рекомендую залететь в наш <a href="https://t.me/funpay_cardinal">Telegram
-чат (клик)</a>. Тут и поможем чем сможем и посидеть можно.</h2>
+FunPayNEXT основан на FunPay Cardinal, созданном Woopertail и sidor0912. [Исходный проект](https://github.com/sidor0912/FunPayCardinal)
 
 ## :clipboard: **Содержание**
 
@@ -20,9 +19,9 @@
     - [Windows](#large_blue_diamond-windows)
     - [Linux (Ubuntu)](#hotsprings-linux-ubuntu)
     - [Docker](#whale-docker)
+    - [Переход с FunPay Cardinal](#переход-с-funpay-cardinal)
 - [Установка плагинов](#electric_plug-установка-плагинов)
 - [Мне нужна помощь](#question-мне-нужна-помощь)
-- [Star it](#star-star-it)
 
 ## :robot: **Возможности**
 
@@ -45,7 +44,7 @@
 - Уведомления о выдаче товара.
 - Уведомления о новых сообщениях
 - Возможность отвечать на сообщения прямо из Telegram.
-- Возможность полностью настраивать автовыдачу / автоответчик и все остальные модули FPC.
+- Настройка автовыдачи, автоответчика и остальных модулей FunPayNEXT.
 - Возможность добавлять автовыдачу для лотов, получая лоты прямо с FunPay.
 
 ### :gear: **Дополнительные возможности**
@@ -74,49 +73,45 @@
   класса, а не просто набор данных в JSON.
 - Возможность легкого создания плагинов.
 - Сконфигурированный логгер. Никаких принтов!
-- Собственный Python-пакет FunPayAPI, который никак не привязан к FunPay Cardinal.
-- Поддержка лично от меня :)
+- Python-пакет FunPayAPI можно использовать отдельно от бота.
 
 ## :electric_plug: Плагины
 
-- [Канал с плагинами](https://t.me/fpc_plugins)
+Новые плагины могут импортировать `FunPayNEXT` и `get_app` из `funpaynext`. Для существующих плагинов доступны импорты `cardinal.Cardinal`, `cardinal.get_cardinal` и `Utils.cardinal_tools`.
 
 ## :arrow_down: Установка
 
-Арендовать виртуальный сервер можно на [FirstByte](https://firstbyte.ru/?from=162840). Выбирайте Ubuntu 22-24 версии,
-остальные параметры не важны.
-
 ### :large_blue_diamond: Windows
 
-1. Скачайте и установите [Python 3.11.0](https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe).
-    1. При установке поставьте галочку у `Add python.exe to PATH` на первом экране установки.
-2. Скачайте [FunPay Cardinal](https://github.com/sidor0912/FunPayCardinal/archive/refs/heads/master.zip)
-3. Перенесите архив `FunPayCardinal-main.zip` в нужное Вам место и распакуйте его.
-4. Перейдите в папку `FunPayCardinal-main`.
-5. Запустите файл `Setup.bat`. Дождитесь окончания загрузки пакетов.
-6. Закройте командную строку и запустите файл `Start.bat`.
+1. Установите Python 3.11 или новее и включите `Add python.exe to PATH`. [Python для Windows](https://www.python.org/downloads/windows/)
+2. Скачайте и распакуйте архив. [FunPayNEXT](https://github.com/xelawave/FunPayNEXT/archive/refs/heads/main.zip)
+3. Запустите `Setup.bat` в распакованной папке и дождитесь установки зависимостей.
+4. Запустите `Start.bat`, пройдите первичную настройку и запустите `Start.bat` снова.
 
 ### :hotsprings: Linux (Ubuntu)
 
-1. Выполните команду:
-   `wget https://raw.githubusercontent.com/sidor0912/FunPayCardinal/main/install-fpc.sh -O install-fpc.sh && bash install-fpc.sh`
-2. Следуйте инструкциям установщика.
-   Данный скрипт автоматически установит всё необходимое и запустит бота как фоновый процесс.
+Установщик загрузит FunPayNEXT и запустит службу systemd для выбранного пользователя.
+
+```bash
+curl -fLO https://raw.githubusercontent.com/xelawave/FunPayNEXT/main/install-funpaynext.sh
+bash install-funpaynext.sh
+```
+
+По умолчанию установщик берёт архив ветки `main`. Чтобы закрепить версию, загрузите установщик из выбранного коммита или тега и передайте этот же идентификатор в `FUNPAYNEXT_REF`. Управление службой доступно через `systemctl status funpaynext@ИМЯ_ПОЛЬЗОВАТЕЛЯ`.
 
 ### :whale: Docker
 
 1. Установите [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) или Docker Engine +
    Docker Compose (Linux) и запустите его.
-2. Скачайте [FunPay Cardinal](https://github.com/sidor0912/FunPayCardinal/archive/refs/heads/master.zip) и распакуйте
-   архив, либо склонируйте репозиторий.
+2. Распакуйте исходники или склонируйте репозиторий. [FunPayNEXT](https://github.com/xelawave/FunPayNEXT)
 3. Перейдите в папку проекта и соберите образ:
    ```
    docker compose build
    ```
-4. При первом запуске Кардинал запросит настройки (логин, токены и т.д.) через консольный ввод, поэтому для
+4. При первом запуске FunPayNEXT запросит настройки через консольный ввод, поэтому для
    первичной настройки запустите разовый интерактивный контейнер:
    ```
-   docker compose run --rm funpaycardinal
+   docker compose run --rm funpaynext
    ```
    Отвечайте на вопросы мастера настройки прямо в этом окне.
 5. Теперь можно запускать бота в фоне:
@@ -125,12 +120,20 @@
    ```
 6. Полезные команды:
     - Логи: `docker compose logs -f`
-    - Подключиться к консоли запущенного контейнера: `docker attach
-      funpaycardinal` (отключиться без остановки контейнера — `Ctrl+P`, затем `Ctrl+Q`).
+    - Подключиться к консоли запущенного контейнера через `docker compose attach funpaynext`. Для отключения используйте `Ctrl+P`, затем `Ctrl+Q`.
     - Остановить: `docker compose down`.
 
    Папки `configs`, `logs`, `storage` и `plugins` монтируются с хоста внутрь контейнера, поэтому все данные
    сохраняются между перезапусками и пересборками образа.
+
+### Переход с FunPay Cardinal
+
+1. Остановите старого бота. Для systemd используйте `sudo systemctl stop FunPayCardinal@ИМЯ_ПОЛЬЗОВАТЕЛЯ`, для Docker запустите `docker compose down` в старой папке.
+2. Сделайте резервную копию каталогов `configs`, `storage`, `plugins` и `logs`. Скопируйте их из старой установки в отдельную папку FunPayNEXT. Установщик systemd ожидает их в `/home/ИМЯ_ПОЛЬЗОВАТЕЛЯ/funpaynext` с правами выбранного пользователя.
+3. Запустите FunPayNEXT и проверьте доступ к аккаунту, уведомления и загрузку плагинов. Старые ключи `watermark` и настройки рассылок можно оставить в файлах, новый бот их игнорирует.
+4. После проверки отключите автозапуск старой службы, если он был включён. Для отката остановите FunPayNEXT и запустите прежнюю установку из её папки с сохранёнными данными.
+
+Команды Telegram `/check_updates` и `/update` используют опубликованные релизы FunPayNEXT. До первого релиза обновляйте исходники вручную после резервного копирования.
 
 ## :electric_plug: Установка плагинов
 
@@ -144,10 +147,4 @@
 
 ## :question: Мне нужна помощь
 
-Если у вас остались какие-либо вопросы, мы с радостью ответим на них в
-нашем [Telegram чате](https://t.me/funpay_cardinal).
-
-## :star: Star it
-
-Если вам удобно пользоваться FunPay Cardinal, не забудьте поставить :star: звезду :star: данному проекту в правом
-верхнем углу GitHub-страницы (нужно быть авторизованным в свой аккаунт) :)
+Сообщайте об ошибках и задавайте вопросы в Issues. [FunPayNEXT Issues](https://github.com/xelawave/FunPayNEXT/issues)

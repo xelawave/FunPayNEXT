@@ -1,0 +1,40 @@
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/%i/funpaynext
+ExecStart=/home/%i/pyvenv/bin/python /home/%i/funpaynext/main.py
+Restart=always
+RestartSec=10s
+SyslogIdentifier=funpaynext-%i
+User=%i
+Environment="LANG=en_US.utf8"
+Environment="FUNPAYNEXT_SYSTEMD=1"
+
+ExecStartPre=+/usr/bin/install -m 755 -o root -g root -d /run/funpaynext
+ExecStartPre=+/usr/bin/install -m 755 -o %i -g root -d /run/funpaynext/%i
+
+PIDFile=/run/funpaynext/%i/funpaynext.pid
+
+# FunPayNEXT security hardening, all of the below entries are optional, but their existence improves security of your system
+# * As stated above this entries are optional, if some of the below entries are not supported by your system, you can safely remove them
+# * If something doesn't work, you can try to remove some of the below entries, but please do it one by one, so you can identify which entry is causing the issue
+DevicePolicy=closed
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateMounts=yes
+PrivateTmp=yes
+PrivateUsers=yes
+ProtectHostname=yes
+# Prevent writes to /usr, /boot, and /etc
+ProtectSystem=full
+ReadWritePaths=/home/%i/funpaynext /home/%i/pyvenv -/run/funpaynext
+# Prevent other services from accessing PID file
+# UMask=0077
+# End of FunPayNEXT security hardening
+
+[Unit]
+After=network.target
+Description=FunPayNEXT Bot Service (on %I)
+Documentation=https://github.com/xelawave/FunPayNEXT/blob/main/README.md

@@ -1,7 +1,7 @@
 """
 Проверка на обновления.
 """
-import time
+import re
 from logging import getLogger
 from locales.localizer import Localizer
 import requests
@@ -9,11 +9,16 @@ import os
 import zipfile
 import shutil
 import json
+from pathlib import Path
+from urllib.parse import quote
 
-logger = getLogger("FPC.update_checker")
+from project_info import REPOSITORY
+
+logger = getLogger("FunPayNEXT.update_checker")
 localizer = Localizer()
 _ = localizer.translate
 
+RELEASE_API = f"https://api.github.com/repos/{REPOSITORY}"
 HEADERS = {
     "accept": "application/vnd.github+json"
 }
@@ -35,121 +40,60 @@ class Release:
         self.sources_link = sources_link
 
 
-# Получение данных о новом релизе
-def get_tags(current_tag: str) -> list[str] | None:
-    """
-    Получает все теги с GitHub репозитория.
-    :param current_tag: текущий тег.
+def _release_version(tag: str) -> tuple[int, ...] | None:
+    if not re.fullmatch(r"v?\d+(?:\.\d+){2,3}", tag):
+        return None
+    parts = tuple(int(part) for part in tag.removeprefix("v").split("."))
+    return parts + (0,) * (4 - len(parts))
 
-    :return: список тегов.
+
+def get_new_releases(current_tag: str) -> int | list[Release]:
     """
+    Возвращает новые стабильные релизы FunPayNEXT в порядке установки.
+
+    Коды: 2 — установлена актуальная версия, 3 — ошибка GitHub, 4 — релизов пока нет.
+    """
+    current_version = _release_version(current_tag)
+    if current_version is None:
+        return 3
+
+    candidates = []
+    has_release = False
+    page = 1
     try:
-        page = 1
-        json_response: list[dict] = []
-        while not any([el.get("name") == current_tag for el in json_response]):
-            if page != 1:
-                time.sleep(1)
-            response = requests.get(f"https://api.github.com/repos/sidor0912/FunPayCardinal/tags?page={page}",
-                                    headers=HEADERS)
-            if not response.status_code == 200 or not response.json():
-                logger.debug(f"Update status code is {response.status_code}!")
-                return None
-            else:
-                json_response.extend(response.json())
-                page += 1
-        tags = [i.get("name") for i in json_response]
-        return tags or None
-    except:
+        while True:
+            response = requests.get(f"{RELEASE_API}/releases", params={"page": page, "per_page": 100},
+                                    headers=HEADERS, timeout=15)
+            response.raise_for_status()
+            for item in response.json():
+                if item.get("draft") or item.get("prerelease"):
+                    continue
+                tag = item.get("tag_name") or ""
+                version = _release_version(tag)
+                if version is None:
+                    continue
+                has_release = True
+                if version > current_version:
+                    description = item.get("body") or ""
+                    source = f"{RELEASE_API}/zipball/{quote(tag, safe='')}"
+                    candidates.append((version, Release(tag, description, source)))
+            if "next" not in response.links:
+                break
+            page += 1
+    except (requests.RequestException, ValueError):
         logger.debug("TRACEBACK", exc_info=True)
-        return None
+        return 3
 
-
-def get_next_tag(tags: list[str], current_tag: str):
-    """
-    Ищет след. тег после переданного.
-    Если не находит текущий тег, возвращает первый.
-    Если текущий тег - последний, возвращает None.
-
-    :param tags: список тегов.
-    :param current_tag: текущий тег.
-
-    :return: след. тег / первый тег / None
-    """
-    try:
-        curr_index = tags.index(current_tag)
-    except ValueError:
-        return tags[len(tags) - 1]
-
-    if not curr_index:
-        return None
-    return tags[curr_index - 1]
-
-
-def get_releases(from_tag: str) -> list[Release] | None:
-    """
-    Получает данные о доступных релизах, начиная с тега.
-
-    :param from_tag: тег релиза, с которого начинать поиск.
-
-    :return: данные релизов.
-    """
-    try:
-        page = 1
-        json_response: list[dict] = []
-        while not any([el.get("tag_name") == from_tag for el in json_response]):
-            if page != 1:
-                time.sleep(1)
-            response = requests.get(f"https://api.github.com/repos/sidor0912/FunPayCardinal/releases?page={page}",
-                                    headers=HEADERS)
-            if not response.status_code == 200 or not response.json():
-                logger.debug(f"Update status code is {response.status_code}!")
-                return None
-            else:
-                json_response.extend(response.json())
-                page += 1
-        result = []
-        to_append = False
-        for el in json_response[::-1]:
-            if (name := el.get("tag_name")) == from_tag:
-                to_append = True
-
-            if to_append:
-                description = el.get("body")
-                sources = el.get("zipball_url")
-                if "#unskippable" in description:
-                    to_append = False
-                release = Release(name, description, sources)
-                result.append(release)
-                if not to_append:
-                    break
-        return result if result else None
-    except:
-        logger.debug("TRACEBACK", exc_info=True)
-        return None
-
-
-def get_new_releases(current_tag) -> int | list[Release]:
-    """
-    Проверяет на наличие обновлений.
-
-    :param current_tag: тег текущей версии.
-
-    :return: список объектов релизов или код ошибки:
-        1 - произошла ошибка при получении списка тегов.
-        2 - текущий тег является последним.
-        3 - не удалось получить данные о релизе.
-    """
-    tags = get_tags(current_tag)
-    if tags is None:
-        return 1
-
-    next_tag = get_next_tag(tags, current_tag)
-    if next_tag is None:
+    if not has_release:
+        return 4
+    if not candidates:
         return 2
 
-    releases = get_releases(next_tag)
-    if releases is None:
-        return 3
+    releases = []
+    for _, release in sorted(candidates, key=lambda candidate: candidate[0]):
+        releases.append(release)
+        if "#unskippable" in release.description:
+            break
     return releases
 
 
@@ -163,7 +107,7 @@ def download_zip(url: str) -> int:
     :return: 0, если архив с обновлением загружен, иначе - 1.
     """
     try:
-        with requests.get(url, stream=True) as r:
+        with requests.get(url, stream=True, timeout=(10, 30)) as r:
             r.raise_for_status()
             with open("storage/cache/update.zip", 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
@@ -260,19 +204,22 @@ def install_release(folder_name: str) -> int:
         if not os.path.exists(release_folder):
             return 2
 
-        if os.path.exists(os.path.join(release_folder, "delete.json")):
-            with open(os.path.join(release_folder, "delete.json"), "r", encoding="utf-8") as f:
-                data = json.loads(f.read())
-                for i in data:
-                    if not os.path.exists(i):
-                        continue
-                    if os.path.isfile(i):
-                        os.remove(i)
-                    else:
-                        shutil.rmtree(i, ignore_errors=True)
+        obsolete_paths = []
+        manifest = Path(release_folder, "delete.json")
+        protected = {"configs", "logs", "plugins", "storage", ".git"}
+        if manifest.is_file():
+            for name in json.loads(manifest.read_text(encoding="utf-8")):
+                path = Path(name)
+                if (not path.parts or path.anchor or ".." in path.parts
+                        or path.parts[0].lower() in protected
+                        or not path.resolve().is_relative_to(Path.cwd())):
+                    raise ValueError(f"Invalid update removal path: {name}")
+                if path.is_dir():
+                    raise ValueError(f"Update may remove obsolete files only: {name}")
+                obsolete_paths.append(path)
 
         for i in os.listdir(release_folder):
-            if i == "delete.json":
+            if i == "delete.json" or i.lower() in protected:
                 continue
 
             source = os.path.join(release_folder, i)
@@ -286,6 +233,9 @@ def install_release(folder_name: str) -> int:
                 shutil.copy2(source, i)
             else:
                 shutil.copytree(source, os.path.join(".", i), dirs_exist_ok=True)
+
+        for path in obsolete_paths:
+            path.unlink(missing_ok=True)
         return 0
     except:
         logger.debug("TRACEBACK", exc_info=True)

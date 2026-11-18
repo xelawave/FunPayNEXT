@@ -7,14 +7,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from cardinal import Cardinal
+    from funpaynext import FunPayNEXT
 
 from FunPayAPI.types import OrderShortcut, Order
 from FunPayAPI import exceptions, utils as fp_utils
 from FunPayAPI.updater.events import *
 
 from tg_bot import utils, keyboards
-from Utils import cardinal_tools
+from Utils import bot_tools
 from locales.localizer import Localizer
 from threading import Thread
 import configparser
@@ -26,7 +26,7 @@ import re
 LAST_STACK_ID = ""
 MSG_LOG_LAST_STACK_ID = ""
 
-logger = logging.getLogger("FPC.handlers")
+logger = logging.getLogger("FunPayNEXT.handlers")
 localizer = Localizer()
 _ = localizer.translate
 
@@ -59,16 +59,16 @@ ORDER_HTML_TEMPLATE = """<a href="https://funpay.com/orders/DELITEST/" class="tc
 
 
 # INIT MESSAGE
-def save_init_chats_handler(c: Cardinal, e: InitialChatEvent):
+def save_init_chats_handler(c: FunPayNEXT, e: InitialChatEvent):
     """
     Кэширует существующие чаты (чтобы не отправлять приветственные сообщения).
     """
     if c.MAIN_CFG["Greetings"].getboolean("sendGreetings") and e.chat.id not in c.old_users:
         c.old_users[e.chat.id] = int(time.time())
-        cardinal_tools.cache_old_users(c.old_users)
+        bot_tools.cache_old_users(c.old_users)
 
 
-def update_threshold_on_initial_chat(c: Cardinal, e: InitialChatEvent):
+def update_threshold_on_initial_chat(c: FunPayNEXT, e: InitialChatEvent):
     """
     Обновляет пороговое значение для определения новых чатов.
     """
@@ -77,7 +77,7 @@ def update_threshold_on_initial_chat(c: Cardinal, e: InitialChatEvent):
 
 
 # NEW MESSAGE / LAST CHAT MESSAGE CHANGED
-def old_log_msg_handler(c: Cardinal, e: LastChatMessageChangedEvent):
+def old_log_msg_handler(c: FunPayNEXT, e: LastChatMessageChangedEvent):
     """
     Логирует полученное сообщение.
     """
@@ -94,7 +94,7 @@ def old_log_msg_handler(c: Cardinal, e: LastChatMessageChangedEvent):
             logger.info(f"      $CYAN{line}")
 
 
-def log_msg_handler(c: Cardinal, e: NewMessageEvent):
+def log_msg_handler(c: FunPayNEXT, e: NewMessageEvent):
     global MSG_LOG_LAST_STACK_ID
     if e.stack.id() == MSG_LOG_LAST_STACK_ID:
         return
@@ -114,7 +114,7 @@ def log_msg_handler(c: Cardinal, e: NewMessageEvent):
     MSG_LOG_LAST_STACK_ID = e.stack.id()
 
 
-def update_threshold_on_last_message_change(c: Cardinal, e: LastChatMessageChangedEvent | NewMessageEvent):
+def update_threshold_on_last_message_change(c: FunPayNEXT, e: LastChatMessageChangedEvent | NewMessageEvent):
     """
     Обновляет пороговое значение для определения новых чатов.
     """
@@ -133,7 +133,7 @@ def update_threshold_on_last_message_change(c: Cardinal, e: LastChatMessageChang
     c.greeting_threshold_chat_ids.add(chat_id)
 
 
-def greetings_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChangedEvent):
+def greetings_handler(c: FunPayNEXT, e: NewMessageEvent | LastChatMessageChangedEvent):
     """
     Отправляет приветственное сообщение.
     """
@@ -157,11 +157,11 @@ def greetings_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChangedEv
         return
 
     logger.info(_("log_sending_greetings", chat_name, chat_id))
-    text = cardinal_tools.format_msg_text(c.MAIN_CFG["Greetings"]["greetingsText"], obj)
+    text = bot_tools.format_msg_text(c.MAIN_CFG["Greetings"]["greetingsText"], obj)
     Thread(target=c.send_message, args=(chat_id, text, chat_name), daemon=True).start()
 
 
-def add_old_user_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChangedEvent):
+def add_old_user_handler(c: FunPayNEXT, e: NewMessageEvent | LastChatMessageChangedEvent):
     """
     Добавляет пользователя в список написавших.
     """
@@ -179,21 +179,23 @@ def add_old_user_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChange
         return
 
     c.old_users[chat_id] = int(time.time())
-    cardinal_tools.cache_old_users(c.old_users)
+    bot_tools.cache_old_users(c.old_users)
 
 
-def send_response_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChangedEvent):
+def send_response_handler(c: FunPayNEXT, e: NewMessageEvent | LastChatMessageChangedEvent):
     """
     Проверяет, является ли сообщение командой, и если да, отправляет ответ на данную команду.
     """
     if not c.autoresponse_enabled:
         return
     if not c.old_mode_enabled:
-        if isinstance(e, LastChatMessageChangedEvent):
+        if isinstance(e, LastChatMessageChangedEvent) or e.message.author_id == c.account.id:
             return
         obj, mtext = e.message, str(e.message)
         chat_id, chat_name, username = e.message.chat_id, e.message.chat_name, e.message.author
     else:
+        if e.chat.last_by_bot:
+            return
         obj, mtext = e.chat, str(e.chat)
         chat_id, chat_name, username = obj.id, obj.name, obj.name
 
@@ -204,11 +206,11 @@ def send_response_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChang
         return
 
     logger.info(_("log_new_cmd", command, chat_name, chat_id))
-    response_text = cardinal_tools.format_msg_text(c.AR_CFG[command]["response"], obj)
+    response_text = bot_tools.format_msg_text(c.AR_CFG[command]["response"], obj)
     Thread(target=c.send_message, args=(chat_id, response_text, chat_name), daemon=True).start()
 
 
-def old_send_new_msg_notification_handler(c: Cardinal, e: LastChatMessageChangedEvent):
+def old_send_new_msg_notification_handler(c: FunPayNEXT, e: LastChatMessageChangedEvent):
     if any([not c.old_mode_enabled, not c.telegram, not e.chat.unread,
             c.bl_msg_notification_enabled and e.chat.name in c.blacklist,
             e.chat.last_message_type is not MessageTypes.NON_SYSTEM, str(e.chat).strip().lower() in c.AR_CFG.sections(),
@@ -218,7 +220,7 @@ def old_send_new_msg_notification_handler(c: Cardinal, e: LastChatMessageChanged
     if user in c.blacklist:
         user = f"🚷 {user}"
     elif e.chat.last_by_bot:
-        user = f"🐦 {user}"
+        user = f"🤖 {user}"
     else:
         user = f"👤 {user}"
     text = f"<i><b>{user}: </b></i><code>{utils.escape(str(e.chat))}</code>"
@@ -227,7 +229,7 @@ def old_send_new_msg_notification_handler(c: Cardinal, e: LastChatMessageChanged
            daemon=True).start()
 
 
-def send_new_msg_notification_handler(c: Cardinal, e: NewMessageEvent) -> None:
+def send_new_msg_notification_handler(c: FunPayNEXT, e: NewMessageEvent) -> None:
     """
     Отправляет уведомление о новом сообщении в телеграм.
     """
@@ -276,7 +278,7 @@ def send_new_msg_notification_handler(c: Cardinal, e: NewMessageEvent) -> None:
            daemon=True).start()
 
 
-def send_review_notification(c: Cardinal, order: Order, chat_id: int, reply_text: str | None):
+def send_review_notification(c: FunPayNEXT, order: Order, chat_id: int, reply_text: str | None):
     if not c.telegram:
         return
     reply_text = _("ntfc_review_reply_text").format(utils.escape(reply_text)) if reply_text else ""
@@ -288,7 +290,7 @@ def send_review_notification(c: Cardinal, order: Order, chat_id: int, reply_text
            daemon=True).start()
 
 
-def process_review_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChangedEvent):
+def process_review_handler(c: FunPayNEXT, e: NewMessageEvent | LastChatMessageChangedEvent):
     if not c.old_mode_enabled:
         if isinstance(e, LastChatMessageChangedEvent):
             return
@@ -324,19 +326,10 @@ def process_review_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChan
         reply_text = None
         if c.MAIN_CFG["ReviewReply"].getboolean(toggle) and c.MAIN_CFG["ReviewReply"].get(text):
             try:
-                # Укорачиваем текст до 999 символов (оставляем 1 на спецсимвол), до 10 строк
+                # Ограничения FunPay: 1000 символов и 10 строк.
                 def format_text4review(text_: str):
-                    max_l = 999
-                    text_ = text_[:max_l + 1]
-                    if len(text_) > max_l:
-                        ln = len(text_)
-                        indexes = []
-                        for char in (".", "!", "\n"):
-                            index1 = text_.rfind(char)
-                            indexes.extend([index1, text_[:index1].rfind(char)])
-                        text_ = text_[:max(indexes, key=lambda x: (x < ln - 1, x))] + "🐦"
-                    text_ = text_.strip()
-                    while text_.count("\n") > 9 and text.count("\n\n") > 1:
+                    text_ = text_[:1000].strip()
+                    if text_.count("\n") > 9 and text_.count("\n\n") > 1:
                         # заменяем с конца все двойные переносы строк на одинарные, но оставляем как можно больше
                         # переносов строк и не менее одного двойного переноса
                         text_ = text_[::-1].replace("\n\n", "\n",
@@ -345,7 +338,7 @@ def process_review_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChan
                         text_ = text_[::-1].replace("\n", " ", text_.count("\n") - 9)[::-1]
                     return text_
 
-                reply_text = cardinal_tools.format_order_text(c.MAIN_CFG["ReviewReply"].get(text), order)
+                reply_text = bot_tools.format_order_text(c.MAIN_CFG["ReviewReply"].get(text), order)
                 reply_text = format_text4review(reply_text)
                 c.account.send_review(order.id, reply_text)
             except:
@@ -356,7 +349,7 @@ def process_review_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChan
     Thread(target=send_reply, daemon=True).start()
 
 
-def send_command_notification_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChangedEvent):
+def send_command_notification_handler(c: FunPayNEXT, e: NewMessageEvent | LastChatMessageChangedEvent):
     """
     Отправляет уведомление о введенной команде в телеграм.
     """
@@ -381,13 +374,13 @@ def send_command_notification_handler(c: Cardinal, e: NewMessageEvent | LastChat
     if not c.AR_CFG[command].get("notificationText"):
         text = f"🧑‍💻 Пользователь <b><i>{username}</i></b> ввел команду <code>{utils.escape(command)}</code>."  # locale
     else:
-        text = cardinal_tools.format_msg_text(c.AR_CFG[command]["notificationText"], obj)
+        text = bot_tools.format_msg_text(c.AR_CFG[command]["notificationText"], obj)
 
     Thread(target=c.telegram.send_notification, args=(text, keyboards.reply(chat_id, chat_name),
                                                       utils.NotificationTypes.command), daemon=True).start()
 
 
-def test_auto_delivery_handler(c: Cardinal, e: NewMessageEvent | LastChatMessageChangedEvent):
+def test_auto_delivery_handler(c: FunPayNEXT, e: NewMessageEvent | LastChatMessageChangedEvent):
     """
     Выполняет тест автовыдачи.
     """
@@ -426,7 +419,7 @@ def test_auto_delivery_handler(c: Cardinal, e: NewMessageEvent | LastChatMessage
     c.run_handlers(c.new_order_handlers, (c, fake_event,))
 
 
-def send_categories_raised_notification_handler(c: Cardinal, cat: types.Category, error_text: str = "") -> None:
+def send_categories_raised_notification_handler(c: FunPayNEXT, cat: types.Category, error_text: str = "") -> None:
     """
     Отправляет уведомление о поднятии лотов в Telegram.
     """
@@ -440,11 +433,11 @@ def send_categories_raised_notification_handler(c: Cardinal, cat: types.Category
 
 
 # Изменен список ордеров (REGISTER_TO_ORDERS_LIST_CHANGED)
-def get_lot_config_by_name(c: Cardinal, name: str) -> configparser.SectionProxy | None:
+def get_lot_config_by_name(c: FunPayNEXT, name: str) -> configparser.SectionProxy | None:
     """
     Ищет секцию лота в конфиге автовыдачи.
 
-    :param c: объект кардинала.
+    :param c: объект FunPayNEXT.
     :param name: название лота.
 
     :return: секцию конфига или None.
@@ -459,18 +452,18 @@ def check_products_amount(config_obj: configparser.SectionProxy) -> int:
     file_name = config_obj.get("productsFileName")
     if not file_name:
         return 1
-    return cardinal_tools.count_products(f"storage/products/{file_name}")
+    return bot_tools.count_products(f"storage/products/{file_name}")
 
 
 # Новый ордер (REGISTER_TO_NEW_ORDER)
-def log_new_order_handler(c: Cardinal, e: NewOrderEvent, *args):
+def log_new_order_handler(c: FunPayNEXT, e: NewOrderEvent, *args):
     """
     Логирует новый заказ.
     """
     logger.info(f"Новый заказ! ID: $YELLOW#{e.order.id}$RESET")
 
 
-def setup_event_attributes_handler(c: Cardinal, e: NewOrderEvent, *args):
+def setup_event_attributes_handler(c: FunPayNEXT, e: NewOrderEvent, *args):
     config_section_name = None
     config_section_obj = None
     lot_shortcut = None
@@ -522,7 +515,7 @@ def setup_event_attributes_handler(c: Cardinal, e: NewOrderEvent, *args):
         logger.info("Лот найден в конфиге авто-выдачи!")  # todo
 
 
-def send_new_order_notification_handler(c: Cardinal, e: NewOrderEvent, *args):
+def send_new_order_notification_handler(c: FunPayNEXT, e: NewOrderEvent, *args):
     """
     Отправляет уведомления о новом заказе в телеграм.
     """
@@ -554,21 +547,21 @@ def send_new_order_notification_handler(c: Cardinal, e: NewOrderEvent, *args):
            daemon=True).start()
 
 
-def deliver_goods(c: Cardinal, e: NewOrderEvent, *args):
+def deliver_goods(c: FunPayNEXT, e: NewOrderEvent, *args):
     chat = c.account.get_chat_by_name(e.order.buyer_username)
     if chat:
         chat_id = chat.id
     else:
         chat_id = e.order.chat_id
     cfg_obj = getattr(e, "config_section_obj")
-    delivery_text = cardinal_tools.format_order_text(cfg_obj["response"], e.order)
+    delivery_text = bot_tools.format_order_text(cfg_obj["response"], e.order)
 
     amount, goods_left, products = 1, -1, []
     try:
         if file_name := cfg_obj.get("productsFileName"):
             if c.multidelivery_enabled and not cfg_obj.getboolean("disableMultiDelivery"):
                 amount = e.order.amount if e.order.amount else 1
-            products, goods_left = cardinal_tools.get_products(f"storage/products/{file_name}", amount)
+            products, goods_left = bot_tools.get_products(f"storage/products/{file_name}", amount)
             delivery_text = delivery_text.replace("$product", "\n".join(products).replace("\\n", "\n"))
     except Exception as exc:
         logger.error(
@@ -585,7 +578,7 @@ def deliver_goods(c: Cardinal, e: NewOrderEvent, *args):
         setattr(e, "error", 1)
         setattr(e, "error_text", f"Не удалось отправить сообщение с товаром для заказа {e.order.id}.")  # locale
         if file_name and products:
-            cardinal_tools.add_products(f"storage/products/{file_name}", products, at_zero_position=True)
+            bot_tools.add_products(f"storage/products/{file_name}", products, at_zero_position=True)
     else:
         logger.info(f"Товар для заказа {e.order.id} выдан.")  # locale
         setattr(e, "delivered", True)
@@ -594,7 +587,7 @@ def deliver_goods(c: Cardinal, e: NewOrderEvent, *args):
         setattr(e, "goods_left", goods_left)
 
 
-def deliver_product_handler(c: Cardinal, e: NewOrderEvent, *args) -> None:
+def deliver_product_handler(c: FunPayNEXT, e: NewOrderEvent, *args) -> None:
     """
     Обертка для deliver_product(), обрабатывающая ошибки.
     """
@@ -617,7 +610,7 @@ def deliver_product_handler(c: Cardinal, e: NewOrderEvent, *args) -> None:
 
 
 # REGISTER_TO_POST_DELIVERY
-def send_delivery_notification_handler(c: Cardinal, e: NewOrderEvent):
+def send_delivery_notification_handler(c: FunPayNEXT, e: NewOrderEvent):
     """
     Отправляет уведомление в телеграм об отправке товара.
     """
@@ -636,7 +629,7 @@ def send_delivery_notification_handler(c: Cardinal, e: NewOrderEvent):
     Thread(target=c.telegram.send_notification, args=(text,),
            kwargs={"notification_type": utils.NotificationTypes.delivery}, daemon=True).start()
 
-def update_current_lots(c: Cardinal, e: NewOrderEvent):
+def update_current_lots(c: FunPayNEXT, e: NewOrderEvent):
     logger.info("Получаю информацию о лотах...")  # locale
     attempts = 3
     while attempts:
@@ -654,7 +647,7 @@ def update_current_lots(c: Cardinal, e: NewOrderEvent):
         return
 
 
-def update_profile_lots(c: Cardinal, e: NewOrderEvent):
+def update_profile_lots(c: FunPayNEXT, e: NewOrderEvent):
     """Обновляет лоты в c.profile"""
     if c.curr_profile_last_tag != e.runner_tag or c.profile_last_tag == e.runner_tag:
         return
@@ -664,11 +657,11 @@ def update_profile_lots(c: Cardinal, e: NewOrderEvent):
     for lot_id, lot in lots.items():
         c.profile.update_lot(lot)
 
-def update_lot_state(cardinal: Cardinal, lot: types.LotShortcut, task: int) -> bool:
+def update_lot_state(cardinal: FunPayNEXT, lot: types.LotShortcut, task: int) -> bool:
     """
     Обновляет состояние лота
 
-    :param cardinal: объект Кардинала.
+    :param cardinal: объект FunPayNEXT.
     :param lot: объект лота.
     :param task: -1 - деактивировать лот. 1 - активировать лот.
 
@@ -704,7 +697,7 @@ def update_lot_state(cardinal: Cardinal, lot: types.LotShortcut, task: int) -> b
     return False
 
 
-def update_lots_states(cardinal: Cardinal, event: NewOrderEvent):
+def update_lots_states(cardinal: FunPayNEXT, event: NewOrderEvent):
     if not any([cardinal.autorestore_enabled, cardinal.autodisable_enabled]):
         return
     curr_profile_tag = cardinal.curr_profile_last_tag
@@ -779,9 +772,9 @@ def update_lots_states(cardinal: Cardinal, event: NewOrderEvent):
                kwargs={"notification_type": utils.NotificationTypes.lots_restore}, daemon=True).start()
 
 
-def update_profiles_handler(cardinal: Cardinal, event: NewOrderEvent | OrdersListChangedEvent, *args):
+def update_profiles_handler(cardinal: FunPayNEXT, event: NewOrderEvent | OrdersListChangedEvent, *args):
     """Обновляет информацию о профилях и состояния лотов в отдельном потоке."""
-    def f(c: Cardinal, e: NewOrderEvent):
+    def f(c: FunPayNEXT, e: NewOrderEvent):
         try:
             update_current_lots(c, e)
             update_profile_lots(c, e)
@@ -795,14 +788,14 @@ def update_profiles_handler(cardinal: Cardinal, event: NewOrderEvent | OrdersLis
         Thread(target=f, args=(cardinal, event), daemon=True).start()
 
 # BIND_TO_ORDER_STATUS_CHANGED
-def send_thank_u_message_handler(cardinal: Cardinal, event: OrderStatusChangedEvent):
+def send_thank_u_message_handler(cardinal: FunPayNEXT, event: OrderStatusChangedEvent):
     """
     Отправляет ответное сообщение на подтверждение заказа.
     """
     if not cardinal.MAIN_CFG["OrderConfirm"].getboolean("sendReply") or event.order.status is not types.OrderStatuses.CLOSED:
         return
 
-    text = cardinal_tools.format_order_text(cardinal.MAIN_CFG["OrderConfirm"]["replyText"], event.order)
+    text = bot_tools.format_order_text(cardinal.MAIN_CFG["OrderConfirm"]["replyText"], event.order)
     chat = cardinal.account.get_chat_by_name(event.order.buyer_username)
     if chat:
         chat_id = chat.id
@@ -811,11 +804,10 @@ def send_thank_u_message_handler(cardinal: Cardinal, event: OrderStatusChangedEv
     logger.info(f"Пользователь $YELLOW{event.order.buyer_username}$RESET подтвердил выполнение заказа "  # locale
                 f"$YELLOW{event.order.id}.$RESET")  # locale
     logger.info(f"Отправляю ответное сообщение ...")  # locale
-    Thread(target=cardinal.send_message, args=(chat_id, text, event.order.buyer_username),
-           kwargs={'watermark': cardinal.MAIN_CFG["OrderConfirm"].getboolean("watermark")}, daemon=True).start()
+    Thread(target=cardinal.send_message, args=(chat_id, text, event.order.buyer_username), daemon=True).start()
 
 
-def send_order_confirmed_notification_handler(cardinal: Cardinal, event: OrderStatusChangedEvent):
+def send_order_confirmed_notification_handler(cardinal: FunPayNEXT, event: OrderStatusChangedEvent):
     """
     Отправляет уведомление о подтверждении заказа в Telegram.
     """
@@ -836,13 +828,13 @@ def send_order_confirmed_notification_handler(cardinal: Cardinal, event: OrderSt
            daemon=True).start()
 
 
-def send_bot_started_notification_handler(c: Cardinal, *args):
+def send_bot_started_notification_handler(c: FunPayNEXT, *args):
     """
     Отправляет уведомление о запуске бота в телеграм.
     """
     if c.telegram is None:
         return
-    text = _("fpc_init", c.VERSION, c.account.username, c.account.id,
+    text = _("app_initialized", c.VERSION, c.account.username, c.account.id,
              c.balance.total_rub, c.balance.total_usd, c.balance.total_eur, c.account.active_sales)
     for i in c.telegram.init_messages:
         try:

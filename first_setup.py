@@ -1,5 +1,5 @@
 """
-В данном модуле написана подпрограмма первичной настройки FunPayCardinal'а.
+Первичная настройка FunPayNEXT.
 """
 
 import os
@@ -7,7 +7,7 @@ from configparser import ConfigParser
 import time
 import telebot
 from colorama import Fore, Style
-from Utils.cardinal_tools import validate_proxy, hash_password, build_proxy, check_proxy
+from Utils.bot_tools import validate_proxy, hash_password, build_proxy, check_proxy
 from Utils.config_loader import load_main_config
 
 # locale#locale#locale
@@ -59,7 +59,6 @@ default_config = {
     },
 
     "OrderConfirm": {
-        "watermark": "1",
         "sendReply": "0",
         "replyText": "$username, спасибо за подтверждение заказа $order_id!\nЕсли не сложно, оставь, пожалуйста, отзыв!"
     },
@@ -84,7 +83,6 @@ default_config = {
     },
 
     "Other": {
-        "watermark": "🐦",
         "requestsDelay": "4",
         "language": "ru"
     }

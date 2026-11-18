@@ -398,7 +398,7 @@ Callback для отключения бота.
 Использование: CBT.SHUT_DOWN:stage:instance_id
 
 stage: int - текущая стадия подтверждения (0-6).
-instance_id: int - ID запуска FPC.
+instance_id: int - ID запуска FunPayNEXT.
 """
 
 CANCEL_SHUTTING_DOWN = "38"
@@ -599,7 +599,7 @@ data:
 stars: int - кол-во звезд (от 1 до 5)
 """
 
-EDIT_WATERMARK = "59"
+# 59 was used for watermark editing.
 """
 Callback для активации режима ожидания текста вотемарки сообщений.
 

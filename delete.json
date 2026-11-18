@@ -1,11 +1,7 @@
 [
-  "hooks",
-  "FunPay Cardinal.spec",
-  "plugins/del_old_users.py",
-  "storage/plugins/del_old_users_plugin_data.json",
-  "storage/plugins/del_old_users_settings.json",
-  "plugins/cookie_changer.py",
-  "locales/eng.py",
-  "setup.py",
-  "linux_install.sh"
+  ".github/FUNDING.yml",
+  "announcements.py",
+  "Cardinal.ico",
+  "FunPayCardinal@.service",
+  "install-fpc.sh"
 ]

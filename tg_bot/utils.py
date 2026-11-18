@@ -8,7 +8,7 @@ import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from cardinal import Cardinal
+    from funpaynext import FunPayNEXT
 
 from telebot.types import InlineKeyboardMarkup as K, InlineKeyboardButton as B
 import configparser
@@ -16,8 +16,7 @@ import datetime
 import os.path
 import json
 import time
-import unicodedata
-import Utils.cardinal_tools
+import Utils.bot_tools
 from locales.localizer import Localizer
 from tg_bot import CBT
 
@@ -51,14 +50,12 @@ class NotificationTypes:
     """Уведомление о поднятии лотов."""
     other = "10"
     """Прочие уведомления (плагины)."""
-    announcement = "11"
-    """Новости / объявления."""
-    ad = "12"
-    """Реклама."""
     critical = "13"
     """Не отключаемые критически важные уведомления (только авторизованные юзеры и чаты)."""
-    important_announcement = "14"
-    """Не отключаемые новости/объявления (все возможные чаты)."""
+
+
+# Previously used by developer announcements and advertisements.
+RETIRED_NOTIFICATION_TYPES = {"11", "12", "14"}
 
 
 def load_authorized_users() -> dict[int, dict[str, bool | None | str]]:
@@ -92,7 +89,11 @@ def load_notification_settings() -> dict:
     if not os.path.exists("storage/cache/notifications.json"):
         return {}
     with open("storage/cache/notifications.json", "r", encoding="utf-8") as f:
-        return json.loads(f.read())
+        settings = json.load(f)
+    for chat_settings in settings.values():
+        for notification_type in RETIRED_NOTIFICATION_TYPES:
+            chat_settings.pop(notification_type, None)
+    return settings
 
 
 def load_answer_templates() -> list[str]:
@@ -160,7 +161,7 @@ def escape(text: str) -> str:
     return text
 
 
-def format_message_line(cardinal: Cardinal, msg, last: dict | None = None, *, force_show_author: bool = False,
+def format_message_line(cardinal: FunPayNEXT, msg, last: dict | None = None, *, force_show_author: bool = False,
                         chat_url: bool = False, mono: bool = True, hide_watermark: bool = False,
                         show_ads: bool = True, show_image_name: bool | None = None,
                         system_message_style: str = "code") -> str:
@@ -171,7 +172,7 @@ def format_message_line(cardinal: Cardinal, msg, last: dict | None = None, *, fo
     сообщениях, полная/недавняя история чата, синхронизация с форумом) - не дублируй её, зови
     эту функцию (или format_messages() для готового списка сообщений).
 
-    :param cardinal: экземпляр Cardinal (нужен account.id, blacklist, show_image_name).
+    :param cardinal: экземпляр FunPayNEXT (нужен account.id, blacklist, show_image_name).
     :param msg: сообщение чата (FunPayAPI.types.Message).
     :param last: {"author_id", "by_bot", "badge", "by_vertex"} предыдущего ПОКАЗАННОГО сообщения -
         нужен, чтобы схлопнуть подпись автора у подряд идущих сообщений одного и того же автора.
@@ -185,8 +186,7 @@ def format_message_line(cardinal: Cardinal, msg, last: dict | None = None, *, fo
         подписи автора.
     :param chat_url: оборачивать ник автора ссылкой на чат на FunPay.
     :param mono: оборачивать текст обычных сообщений в <code> (моноширинный шрифт).
-    :param hide_watermark: прятать вотермарку бота (Other.watermark в _main.cfg) под спойлером в
-        собственных сообщениях, отправленных ботом.
+    :param hide_watermark: legacy argument kept for plugins.
     :param show_ads: показывать рекламные сообщения (📣) или молча пропускать их
         (возвращается пустая строка, last обновлять не нужно).
     :param show_image_name: показывать ли имя файла у отправленных изображений вместо "photo".
@@ -215,7 +215,7 @@ def format_message_line(cardinal: Cardinal, msg, last: dict | None = None, *, fo
         if msg.is_autoreply:
             author = f"<i><b>📦 {_('you')} ({msg.badge}):</b></i> "
         elif msg.by_bot:
-            author = f"<i><b>🤖 FPC:</b></i> "
+            author = f"<i><b>🤖 FunPayNEXT:</b></i> "
         else:
             author = f"<i><b>🫵 {_('you')}:</b></i> "
 
@@ -231,7 +231,7 @@ def format_message_line(cardinal: Cardinal, msg, last: dict | None = None, *, fo
         elif msg.author in cardinal.blacklist:
             author = f"<i><b>🚷 {author_text}: </b></i>"
         elif msg.by_bot:
-            author = f"<i><b>🐦 {author_text}: </b></i>"
+            author = f"<i><b>🤖 {author_text}: </b></i>"
         elif msg.by_vertex:
             author = f"<i><b>🐺 {author_text}: </b></i>"
     else:
@@ -241,18 +241,9 @@ def format_message_line(cardinal: Cardinal, msg, last: dict | None = None, *, fo
         if msg.author_id == 0 and system_message_style == "bold_italic":
             body = f"<b><i>{escape(msg.text)}</i></b>"
         else:
-            text = msg.text
-            hidden_wm = False
-            if hide_watermark and msg.author_id == account.id and msg.by_bot:
-                watermark = cardinal.MAIN_CFG["Other"].get("watermark", "")
-                if watermark and text.startswith(f"{watermark}\n"):
-                    text = text.replace(watermark, "", 1)
-                    hidden_wm = True
-            body = escape(text)
+            body = escape(msg.text)
             if mono:
                 body = f"<code>{body}</code>"
-            if hidden_wm:
-                body = f"<tg-spoiler>🐦</tg-spoiler>{body}"
     elif msg.image_link:
         is_own_bot_image = msg.author_id == account.id and msg.by_bot
         show_name = cardinal.show_image_name if show_image_name is None else show_image_name
@@ -264,14 +255,14 @@ def format_message_line(cardinal: Cardinal, msg, last: dict | None = None, *, fo
     return f"{author}{body}"
 
 
-def format_messages(cardinal: Cardinal, messages: list, **options) -> str:
+def format_messages(cardinal: FunPayNEXT, messages: list, **options) -> str:
     """
     Форматирует список сообщений чата в HTML для Telegram, вызывая format_message_line() для
     каждого сообщения по очереди и склеивая результат (см. её докстринг за подробностями и
     списком поддерживаемых опций - force_show_author/chat_url/mono/hide_watermark/show_ads/
     show_image_name/system_message_style).
 
-    :param cardinal: экземпляр Cardinal (нужен account.id, blacklist, show_image_name).
+    :param cardinal: экземпляр FunPayNEXT (нужен account.id, blacklist, show_image_name).
     :param messages: список сообщений чата (FunPayAPI.types.Message), от старых к новым.
 
     :return: HTML-форматированный текст (используй с parse_mode="HTML").
@@ -285,18 +276,6 @@ def format_messages(cardinal: Cardinal, messages: list, **options) -> str:
         lines.append(line)
         last = {"author_id": msg.author_id, "by_bot": msg.by_bot, "badge": msg.badge, "by_vertex": msg.by_vertex}
     return "\n\n".join(lines)
-
-
-def has_brand_mark(watermark: str) -> bool:
-    """
-    Проверяет, содержит ли watermark какую-нибудь форму названия
-    """
-    simplified = (unicodedata.normalize("NFKD", watermark)
-                  .encode("ascii", "ignore").decode("ascii").lower())
-    ascii_hits = any(kw in simplified for kw in ("cardinal", "fpc"))
-    raw_hits = any(kw in watermark.lower() for kw in ("кардинал", "🐦", "ᴄᴀʀᴅɪɴᴀʟ"))
-
-    return ascii_hits or raw_hits or "ᑕᗩᖇᗪIᑎᗩᒪ" in watermark
 
 
 def split_by_limit(list_of_str: list[str], limit: int = 4096):
@@ -380,7 +359,7 @@ def add_navigation_buttons(keyboard_obj: K, curr_offset: int,
     return keyboard_obj
 
 
-def generate_profile_text(cardinal: Cardinal) -> str:
+def generate_profile_text(cardinal: FunPayNEXT) -> str:
     """
     Генерирует текст с информацией об аккаунте.
 
@@ -416,7 +395,7 @@ def generate_lot_info_text(lot_obj: configparser.SectionProxy) -> str:
         if not os.path.exists(f"storage/products/{lot_obj.get('productsFileName')}"):
             with open(f"storage/products/{lot_obj.get('productsFileName')}", "w", encoding="utf-8"):
                 pass
-        products_amount = Utils.cardinal_tools.count_products(f"storage/products/{lot_obj.get('productsFileName')}")
+        products_amount = Utils.bot_tools.count_products(f"storage/products/{lot_obj.get('productsFileName')}")
         products_amount = f"<code>{products_amount}</code>"
     # locale
     message = f"""<b>{escape(lot_obj.name)}</b>\n

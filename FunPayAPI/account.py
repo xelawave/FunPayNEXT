@@ -793,7 +793,7 @@ class Account:
             img = image
 
         fields = {
-            'file': ("Отправлено_с_помощью_бота_FunPay_Cardinal.png", img, "image/png"),
+            'file': ("image.png", img, "image/png"),
             'file_id': "0"
         }
         boundary = '----WebKitFormBoundary' + ''.join(random.sample(string.ascii_letters + string.digits, 16))
@@ -860,14 +860,12 @@ class Account:
 
         request = {
             "action": "chat_message",
-            "data": {"node": chat_id, "last_message": -1, "content": text}
+            "data": {"node": chat_id, "last_message": -1, "content": text or ""}
         }
 
         if image_id is not None:
             request["data"]["image_id"] = image_id
             request["data"]["content"] = ""
-        else:
-            request["data"]["content"] = f"{self.__bot_character}{text}" if text else ""
 
         chats_data = None if leave_as_unread else {chat_id: chat_name}
 
@@ -920,8 +918,7 @@ class Account:
                     image_name = image_name.get('alt') if image_name else None
                     image_link = image_tag.get("href")
                 else:
-                    message_text = parser.find("div", {"class": "chat-msg-text"}).text. \
-                        replace(self.__bot_character, "", 1)
+                    message_text = parser.find("div", {"class": "chat-msg-text"}).text
             except Exception as e:
                 logger.debug("SEND_MESSAGE RESPONSE")
                 logger.debug(response.content.decode())
@@ -930,7 +927,7 @@ class Account:
                                         self.username, self.id,
                                         mes["html"], image_link, image_name, tag=tag)
         if self.runner and is_private_chat and isinstance(chat_id, int):
-            if add_to_ignore_list and message_obj.id:
+            if (add_to_ignore_list or update_last_saved_message) and message_obj.id:
                 self.runner.mark_as_by_bot(chat_id, message_obj.id)
             if update_last_saved_message:
                 self.runner.update_last_message(chat_id, message_obj.id, message_obj.text)
@@ -1005,7 +1002,7 @@ class Account:
         text = text.strip()
         payload = {
             "authorId": self.id,
-            "text": f"{text}{self.__bot_character}" if text else text,
+            "text": text,
             "rating": rating or "",
             "csrf_token": self.csrf_token,
             "orderId": order_id
@@ -1638,7 +1635,7 @@ class Account:
             chat_with = msg.find("div", {"class": "media-user-name"}).text
             node_msg_id = int(msg.get('data-node-msg'))
             user_msg_id = int(msg.get('data-user-msg'))
-            by_bot = False
+            by_bot = bool(self.runner and self.runner.is_by_bot(chat_id, node_msg_id))
             by_vertex = False
             is_image = last_msg_text in ("Изображение", "Зображення", "Image")
             if last_msg_text.startswith(self.bot_character):
@@ -1651,8 +1648,9 @@ class Account:
             last_msg_text = strip_invisible_suffix(last_msg_text)
 
             chat_obj = types.ChatShortcut(chat_id, chat_with, last_msg_text, node_msg_id, user_msg_id, unread, str(msg))
-            if not is_image:
+            if not is_image or by_bot:
                 chat_obj.last_by_bot = by_bot
+            if not is_image:
                 chat_obj.last_by_vertex = by_vertex
 
             chats_objs.append(chat_obj)
@@ -2149,7 +2147,8 @@ class Account:
                         elif interlocutor_username == author and not interlocutor_id:
                             interlocutor_id = author_id
 
-            by_bot = False
+            by_bot = bool(author_id == self.id and self.runner and isinstance(chat_id, int)
+                          and self.runner.is_by_bot(chat_id, i["id"]))
             by_vertex = False
             image_name = None
             if mb_chat_is_private and (image_tag := parser.find("a", {"class": "chat-img-link"})):

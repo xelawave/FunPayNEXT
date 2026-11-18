@@ -5,10 +5,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from Utils.cardinal_tools import safe_text
+from Utils.bot_tools import safe_text
 
 if TYPE_CHECKING:
-    from cardinal import Cardinal
+    from funpaynext import FunPayNEXT
 
 from tg_bot import utils, keyboards, CBT
 from tg_bot.static_keyboards import CLEAR_STATE_BTN
@@ -23,7 +23,7 @@ localizer = Localizer()
 _ = localizer.translate
 
 
-def init_templates_cp(cardinal: Cardinal, *args):
+def init_templates_cp(cardinal: FunPayNEXT, *args):
     tg = cardinal.telegram
     bot = tg.bot
 
@@ -144,7 +144,7 @@ def init_templates_cp(cardinal: Cardinal, *args):
             return
 
         text = tg.answer_templates[template_index].replace("$username", safe_text(username))
-        result = cardinal.send_message(node_id, text, username, watermark=False)
+        result = cardinal.send_message(node_id, text, username)
 
         if prev_page == 3:
             bot.answer_callback_query(c.id, _("msg_sent_short") if result else _("msg_sending_error_short"))

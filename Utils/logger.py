@@ -99,8 +99,8 @@ class FileLoggerFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-LOGGER_NAMES = ["main", "FunPayAPI", "FPC", "TGBot"]
-"""Логгеры, пишущие и в консоль, и в файл лога (в т.ч. дочерние, например FPC.<имя_плагина>)."""
+LOGGER_NAMES = ["main", "FunPayAPI", "FunPayNEXT", "TGBot", "FPC"]
+"""Логгеры, пишущие и в консоль, и в файл лога (в т.ч. дочерние, например FunPayNEXT.<имя_плагина>)."""
 
 
 class _QueueHandler(logging.handlers.QueueHandler):

@@ -6,10 +6,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from cardinal import Cardinal
+    from funpaynext import FunPayNEXT
     from tg_bot.bot import TGBot
 
-from Utils import config_loader as cfg_loader, exceptions as excs, cardinal_tools, updater
+from Utils import config_loader as cfg_loader, exceptions as excs, bot_tools, updater
 from telebot.types import InlineKeyboardButton as Button
 from tg_bot import utils, keyboards, CBT
 from tg_bot.static_keyboards import CLEAR_STATE_BTN
@@ -80,7 +80,7 @@ def download_file(tg: TGBot, msg: types.Message, file_name: str = "temp_file.txt
     return True
 
 
-def init_uploader(cardinal: Cardinal):
+def init_uploader(cardinal: FunPayNEXT):
     tg = cardinal.telegram
     bot = tg.bot
 
@@ -97,13 +97,13 @@ def init_uploader(cardinal: Cardinal):
         tg.clear_state(m.chat.id, m.from_user.id, True)
         if not check_file(tg, m, type_="txt"):
             return
-        with cardinal_tools.get_products_file_lock(f"storage/products/{m.document.file_name}"):
+        with bot_tools.get_products_file_lock(f"storage/products/{m.document.file_name}"):
             if not download_file(tg, m, m.document.file_name,
                                  custom_path=f"storage/products"):
                 return
 
         try:
-            products_count = cardinal_tools.count_products(f"storage/products/{utils.escape(m.document.file_name)}")
+            products_count = bot_tools.count_products(f"storage/products/{utils.escape(m.document.file_name)}")
         except:
             bot.send_message(m.chat.id, "❌ Произошла ошибка при подсчете товаров.")
             logger.debug("TRACEBACK", exc_info=True)
@@ -259,7 +259,7 @@ def init_uploader(cardinal: Cardinal):
             .add(Button("◀️Назад", callback_data=f"{CBT.PLUGINS_LIST}:{offset}"))
         bot.send_message(m.chat.id,
                          f"✅ Плагин <code>{utils.escape(m.document.file_name)}</code> успешно загружен.\n\n"
-                         f"⚠️Чтобы плагин активировался, <u><b>перезагрузите FPC!</b></u> (/restart)",
+                         f"⚠️Чтобы плагин активировался, <u><b>перезагрузите FunPayNEXT!</b></u> (/restart)",
                          reply_markup=keyboard)
 
     def send_funpay_image(m: types.Message):
@@ -279,7 +279,7 @@ def init_uploader(cardinal: Cardinal):
             file_info = tg.bot.get_file(photo.file_id)
             file = tg.bot.download_file(file_info.file_path)
             image_id = cardinal.account.upload_image(file, type_="chat")
-            result = cardinal.send_message(chat_id, f"$photo={image_id}", username, watermark=False)
+            result = cardinal.send_message(chat_id, f"$photo={image_id}", username)
             if not result:
                 raise Exception("Нету сообщений")
             tg.bot.reply_to(m, f'✅ Сообщение отправлено в переписку '

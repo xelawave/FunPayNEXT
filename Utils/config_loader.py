@@ -9,7 +9,7 @@ import os
 from Utils.exceptions import (ParamNotFoundError, EmptyValueError, ValueNotValidError, SectionNotFoundError,
                               ConfigParseError, ProductsFileNotFoundError, NoProductVarError,
                               SubCommandAlreadyExists, DuplicateSectionErrorWrapper)
-from Utils.cardinal_tools import hash_password, build_proxy
+from Utils.bot_tools import hash_password, build_proxy
 
 
 def check_param(param_name: str, section: SectionProxy, valid_values: list[str | None] | None = None,
@@ -116,7 +116,6 @@ def load_main_config(config_path: str):
         },
 
         "OrderConfirm": {
-            "watermark": ["0", "1"],
             "sendReply": ["0", "1"],
             "replyText": "any"
         },
@@ -141,7 +140,6 @@ def load_main_config(config_path: str):
         },
 
         "Other": {
-            "watermark": "any+empty",
             "requestsDelay": [str(i) for i in range(1, 101)],
             "language": ["ru", "en", "uk"]
         }
@@ -183,11 +181,6 @@ def load_main_config(config_path: str):
                 config.set("Greetings", "greetingsCooldown", "2")
                 with open("configs/_main.cfg", "w", encoding="utf-8") as f:
                     config.write(f)
-            elif section_name == "OrderConfirm" and param_name == "watermark" and param_name not in config[
-                section_name]:
-                config.set("OrderConfirm", "watermark", "1")
-                with open("configs/_main.cfg", "w", encoding="utf-8") as f:
-                    config.write(f)
             elif section_name == "FunPay" and param_name == "keepSentMessagesUnread" and \
                     param_name not in config[section_name]:
                 config.set("FunPay", "keepSentMessagesUnread", "0")
@@ -212,11 +205,6 @@ def load_main_config(config_path: str):
             elif section_name == "FunPay" and param_name == "locale" and \
                     param_name not in config[section_name]:
                 config.set(section_name, "locale", "ru")
-                with open("configs/_main.cfg", "w", encoding="utf-8") as f:
-                    config.write(f)
-            elif section_name == "Other" and param_name == "watermark" and \
-                    param_name in config[section_name] and "𝑪𝒂𝒓𝒅𝒊𝒏𝒂𝒍" in config[section_name][param_name]:
-                config.set(section_name, param_name, "🐦")
                 with open("configs/_main.cfg", "w", encoding="utf-8") as f:
                     config.write(f)
             elif section_name == "Greetings" and param_name == "onlyNewChats" and param_name not in config[
